@@ -13,7 +13,15 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from tp_mcp.remote import REMOTE_TOOL_NAMES, REMOTE_READ_TOOL_NAMES, REMOTE_WRITE_TOOL_NAMES, RemoteConfig, RemoteConfigError, _remote_tools, build_app
+from tp_mcp.remote import (
+    REMOTE_READ_TOOL_NAMES,
+    REMOTE_TOOL_NAMES,
+    REMOTE_WRITE_TOOL_NAMES,
+    RemoteConfig,
+    RemoteConfigError,
+    _remote_tools,
+    build_app,
+)
 from tp_mcp.server import TOOLS
 
 BASE = "http://localhost"
@@ -313,8 +321,17 @@ async def test_write_mode_advertises_nondestructive_tools_and_refuses_cross_athl
         assert listed.status_code == 200
         names = {t["name"] for t in listed.json()["result"]["tools"]}
         assert names == REMOTE_TOOL_NAMES
-        no_delete = await _rpc(client, access, "tools/call", {"name": "tp_delete_workout", "arguments": {"workout_id": "1"}})
+        no_delete = await _rpc(
+            client, access, "tools/call",
+            {"name": "tp_delete_workout", "arguments": {"workout_id": "1"}},
+        )
         assert no_delete.json()["result"]["isError"] is True
-        blocked = await _rpc(client, access, "tools/call", {"name": "tp_add_workout_comment", "arguments": {"athlete": "other", "workout_id": "1", "comment": "hi"}})
+        blocked = await _rpc(
+            client, access, "tools/call",
+            {
+                "name": "tp_add_workout_comment",
+                "arguments": {"athlete": "other", "workout_id": "1", "comment": "hi"},
+            },
+        )
         assert blocked.json()["result"]["isError"] is True
         assert "ATHLETE_TARGETING_NOT_ALLOWED" in blocked.json()["result"]["content"][0]["text"]
