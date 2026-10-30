@@ -143,7 +143,15 @@ class _UsedSet:
 class OwnerOAuthProvider:
     """OAuthAuthorizationServerProvider for a single owner, stateless across restarts."""
 
-    def __init__(self, *, signing_key: str, owner_password: str, issuer_url: str, resource_url: str, scope: str = READ_SCOPE, enable_writes: bool = False):
+    def __init__(
+        self, *,
+        signing_key: str,
+        owner_password: str,
+        issuer_url: str,
+        resource_url: str,
+        scope: str = READ_SCOPE,
+        enable_writes: bool = False,
+    ):
         self._sealer = Sealer(signing_key)
         self._password_digest = hashlib.sha256(owner_password.encode()).digest()
         self.issuer_url = issuer_url.rstrip("/")
