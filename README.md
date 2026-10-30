@@ -419,7 +419,7 @@ Claude cannot modify this via tool parameters. The only parameter is `browser` (
 
 `tp-mcp serve` uses **stdio transport only** - it communicates with Claude Desktop via stdin/stdout, not over the network. There is no HTTP server, no open ports, no remote access.
 
-The optional `tp-mcp serve-http` is a separate, read-only remote server (Streamable HTTP at `/mcp`, OAuth-protected) for ChatGPT, deployed on Render. It exposes 22 read-only tools and nothing that changes your data. See [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md).
+The optional `tp-mcp serve-http` is a separate OAuth-protected remote server (Streamable HTTP at `/mcp`) for ChatGPT, deployable on Render. It defaults to 29 read-only tools; `TP_MCP_ENABLE_WRITES=true` optionally adds 17 scoped coaching write tools on compatible clients, while deletes and high-risk account changes remain blocked. See [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md).
 
 ### Open Source
 
