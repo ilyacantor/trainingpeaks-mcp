@@ -1,10 +1,9 @@
-# Remote read-only server on Render, connected to ChatGPT
+# Remote TrainingPeaks MCP on Render
 
 This runs the TrainingPeaks MCP server on Render as a web service at `https://<your-service>.onrender.com/mcp`,
 for ChatGPT. Everything below happens in a browser; no terminal is needed.
 
-The local stdio server (`tp-mcp serve`) is unchanged. The remote server (`tp-mcp serve-http`) is separate and
-read-only.
+The local stdio server (`tp-mcp serve`) is unchanged. The remote server (`tp-mcp serve-http`) is a separate protected service, read-only by default.
 
 ## What the remote server exposes
 
@@ -39,33 +38,42 @@ ChatGPT connects only through OAuth, so the server is its own OAuth authorizatio
   `https://chatgpt.com/connector/oauth/...`) can register.
 - Access tokens last 1 hour and refresh tokens 30 days. All of them are signed with `MCP_SIGNING_KEY`, so a
   Render restart or redeploy does not disconnect ChatGPT, and changing that key disconnects every client at once.
-- `TP_AUTH_COOKIE` is read from Render's environment. It is never logged and never returned by any endpoint.
+- Preferred: Render stores `TP_USERNAME` and `TP_PASSWORD` as private secrets, and the service signs in to TrainingPeaks, exchanging the returned session cookie for short-lived API tokens. The password is not logged or copied into GitHub.
+- The legacy `TP_AUTH_COOKIE` setting is optional, for accounts that already possess a valid cookie.
 
-## 1. Get your TrainingPeaks cookie (browser)
+## 1. Connect TrainingPeaks without DevTools
 
-1. Log in at https://app.trainingpeaks.com.
-2. Open the browser's developer tools (F12, or right-click the page and choose Inspect), then go to
-   **Application** (Chrome/Edge) or **Storage** (Firefox), then **Cookies**, then `https://app.trainingpeaks.com`.
-3. Copy the **value** of `Production_tpAuth`. Treat it like a password: it grants full access to your account.
+**Do not extract a browser cookie.** For the existing service, go to
+[Render → trainingpeaks-mcp → Environment](https://dashboard.render.com/web/srv-dbi3po0m7kps73bqanf0).
+Add these two private environment variables and save:
 
-## 2. Deploy on Render (browser)
+- `TP_USERNAME`: your **TrainingPeaks username**, which may be different from your email
+- `TP_PASSWORD`: your TrainingPeaks password
 
-1. Open https://dashboard.render.com/blueprints and click **New Blueprint Instance**.
-2. Connect GitHub if asked, and pick the repository `ilyacantor/trainingpeaks-mcp`, branch `main`.
-3. Render reads `render.yaml` and shows one web service, `trainingpeaks-mcp`. When it asks for
-   `TP_AUTH_COOKIE`, paste the cookie value from step 1. `MCP_OWNER_PASSWORD` and `MCP_SIGNING_KEY` are
-   generated for you.
-4. Click **Apply**. Wait until the service shows **Live**. Its address is at the top of the service page, for
-   example `https://trainingpeaks-mcp-abcd.onrender.com`. Your MCP URL is that address plus `/mcp`.
-5. Open the service's **Environment** tab and reveal `MCP_OWNER_PASSWORD`. You will paste it once, when
-   ChatGPT connects.
+Do not paste either value in a chat or into GitHub. The remote server sends
+them directly to TrainingPeaks' own HTTPS login endpoint, obtains a session
+cookie itself, and automatically signs in again when its session expires.
+Its existing `TP_AUTH_COOKIE` setting is **not required**.
 
-If the deploy fails, open **Logs**. The server refuses to start, with a plain message, when a setting is missing or
-TrainingPeaks rejects the cookie (for example
-`TrainingPeaks rejected TP_AUTH_COOKIE at startup (expired: ...)`).
+A username/password-based login is an unofficial TrainingPeaks web interface.
+If TrainingPeaks changes its form or requires SSO/additional verification,
+the server reports a clean failure. For accounts with SSO-only access, this
+particular method may not work.
 
-The `free` plan sleeps after 15 idle minutes, so the first request after a sleep waits for the service to wake. To
-avoid that, change the instance type to a paid one under **Settings**.
+## 2. Render deployment
+
+The service is already created at
+`https://trainingpeaks-mcp-5giu.onrender.com`, and the MCP endpoint is
+`https://trainingpeaks-mcp-5giu.onrender.com/mcp`. It uses the free instance
+type. The remote build is verified by running Python tests, Ruff, and mypy.
+After the login secrets are saved, Render restarts and validates the
+TrainingPeaks session before serving MCP traffic.
+
+An existing, functioning `TP_AUTH_COOKIE` remains a supported legacy
+alternative. You do not need to set it when using the username/password
+method.
+
+The free service sleeps after 15 idle minutes; a paid plan avoids cold starts.
 
 ## 3. Connect ChatGPT (browser)
 
@@ -88,8 +96,7 @@ enabling that does not override the client's plan restrictions.
 
 ## Upkeep
 
-- **Cookie expired** (tools answer with authentication errors, or a restart fails with "rejected TP_AUTH_COOKIE"):
-  repeat step 1, paste the new value into `TP_AUTH_COOKIE` on the **Environment** tab, and save. Render redeploys.
+- **Session expired**: when `TP_USERNAME` and `TP_PASSWORD` are configured, the server automatically logs in again. If login fails (e.g. a changed password or SSO challenge), review the Render logs and update the secrets.
 - **Disconnect every client**: on the Environment tab, generate a new `MCP_SIGNING_KEY` and save. Reconnect from
   ChatGPT afterwards.
 - **Change the owner password**: edit `MCP_OWNER_PASSWORD` (at least 16 characters) and save.
@@ -98,7 +105,9 @@ enabling that does not override the client's plan restrictions.
 
 | Variable | Required | Meaning |
 |----------|----------|---------|
-| `TP_AUTH_COOKIE` | yes | TrainingPeaks `Production_tpAuth` cookie value |
+| `TP_USERNAME` | preferred (with password) | TrainingPeaks login username; may differ from email |
+| `TP_PASSWORD` | preferred (with username) | TrainingPeaks login password, stored privately in Render |
+| `TP_AUTH_COOKIE` | optional alternative | Legacy session-cookie login; not needed if username/password provided |
 | `MCP_OWNER_PASSWORD` | yes, 16+ characters | Approves a ChatGPT connection |
 | `MCP_SIGNING_KEY` | yes, 32+ characters | Signs OAuth clients and tokens |
 | `TP_MCP_ENABLE_WRITES` | no (default false) | Enable 17 non-delete coaching-write tools on supported clients |

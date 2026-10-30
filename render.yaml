@@ -9,7 +9,13 @@ services:
     startCommand: .venv/bin/tp-mcp serve-http
     healthCheckPath: /healthz
     envVars:
-      # Your TrainingPeaks Production_tpAuth cookie value. Render asks for it when the Blueprint is created.
+      # Preferred: enter your TrainingPeaks username and password as private Render secrets.
+      - key: TP_USERNAME
+        sync: false
+      - key: TP_PASSWORD
+        sync: false
+      # Legacy alternative: an already-known browser session cookie.
+      # Leave unset when using TP_USERNAME / TP_PASSWORD.
       - key: TP_AUTH_COOKIE
         sync: false
       # Password you type to approve a ChatGPT connection. Render generates it; read it in the Environment tab.
@@ -18,4 +24,6 @@ services:
       # Signs OAuth clients and tokens. Changing it disconnects ChatGPT until you reconnect.
       - key: MCP_SIGNING_KEY
         generateValue: true
-      # Optional: turn on non-destructive coaching writes for a capable MCP client. Default is read-only.\n      - key: TP_MCP_ENABLE_WRITES\n        value: "false"\n
+      # Optional: non-destructive coaching writes on supported MCP clients.
+      - key: TP_MCP_ENABLE_WRITES
+        value: "false"

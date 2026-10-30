@@ -5,7 +5,9 @@ second MCP server object over the same tool definitions and handlers, exposing
 a read-only default plus optional non-destructive coaching writes; all other tools are refused.
 
 Configuration comes from the environment (Render secrets):
-    TP_AUTH_COOKIE        TrainingPeaks Production_tpAuth cookie value
+    TP_AUTH_COOKIE        optional TrainingPeaks cookie (legacy method)
+    TP_USERNAME           TrainingPeaks login username (optional alternative)
+    TP_PASSWORD           TrainingPeaks login password (optional alternative)
     MCP_OWNER_PASSWORD    password the owner types to approve a ChatGPT connection (16+ chars)
     MCP_SIGNING_KEY       secret that signs OAuth clients and tokens (32+ chars)
     MCP_PUBLIC_URL        public https base URL; on Render RENDER_EXTERNAL_URL is used when unset
@@ -38,6 +40,7 @@ from starlette.routing import Route
 
 from tp_mcp import __version__, apps
 from tp_mcp.auth import AuthStatus, validate_auth
+from tp_mcp.auth.password_login import TrainingPeaksLoginError, login_with_password
 from tp_mcp.auth.storage import ENV_VAR_NAME
 from tp_mcp.remote_auth import READ_SCOPE, WRITE_SCOPE, OwnerOAuthProvider
 from tp_mcp.server import TOOLS, _on_list_resources, _on_read_resource, call_tool
@@ -162,8 +165,15 @@ class RemoteConfig:
     def from_env(cls) -> RemoteConfig:
         env = os.environ
         problems = []
-        if not env.get(ENV_VAR_NAME):
-            problems.append(f"{ENV_VAR_NAME} is not set (the TrainingPeaks Production_tpAuth cookie value)")
+        has_username = bool(env.get("TP_USERNAME"))
+        has_password = bool(env.get("TP_PASSWORD"))
+        if not env.get(ENV_VAR_NAME) and not (has_username and has_password):
+            problems.append(
+                "Set either TP_AUTH_COOKIE or both TP_USERNAME and TP_PASSWORD "
+                "in Render's private Environment tab"
+            )
+        if has_username != has_password:
+            problems.append("TP_USERNAME and TP_PASSWORD must be set together")
         password = env.get("MCP_OWNER_PASSWORD", "")
         if len(password) < 16:
             problems.append("MCP_OWNER_PASSWORD must be set to at least 16 characters")
@@ -275,16 +285,30 @@ def run_remote_server() -> int:
         logger.error("PORT must be set to the listen port (Render sets it automatically); got %r", port_text)
         return 1
 
-    result = asyncio.run(validate_auth(os.environ[ENV_VAR_NAME]))
-    if result.status is not AuthStatus.VALID:
-        logger.error(
-            "TrainingPeaks rejected %s at startup (%s: %s). Update the secret in Render and redeploy.",
-            ENV_VAR_NAME,
-            result.status.value,
-            result.message,
-        )
-        return 1
-    logger.info("TrainingPeaks credential valid (athlete_id: %s)", result.athlete_id)
+    cookie = os.environ.get(ENV_VAR_NAME, "")
+    validation = asyncio.run(validate_auth(cookie)) if cookie else None
+    if validation is None or validation.status is not AuthStatus.VALID:
+        # Alternative to browser cookie extraction: perform the normal
+        # TrainingPeaks password login on the server, then reuse the resulting
+        # cookie for the existing internal API client.
+        username = os.environ.get("TP_USERNAME", "")
+        password = os.environ.get("TP_PASSWORD", "")
+        if not username or not password:
+            status = validation.status.value if validation else "no_credential"
+            logger.error("TrainingPeaks credential unavailable or invalid (%s)", status)
+            return 1
+        try:
+            cookie = asyncio.run(login_with_password(username, password))
+        except TrainingPeaksLoginError as exc:
+            logger.error("TrainingPeaks server-side login failed: %s", exc)
+            return 1
+        validation = asyncio.run(validate_auth(cookie))
+        if validation.status is not AuthStatus.VALID:
+            logger.error("TrainingPeaks login was rejected by its API (%s)", validation.status.value)
+            return 1
+        # Retained in this Render process only; never committed or logged.
+        os.environ[ENV_VAR_NAME] = cookie
+    logger.info("TrainingPeaks credential valid (athlete_id: %s)", validation.athlete_id)
     logger.info(
         "Serving MCP at %s%s (mode=%s, tools=%d)",
         config.public_url,
