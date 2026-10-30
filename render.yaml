@@ -1,0 +1,20 @@
+# Render Blueprint: the read-only remote TrainingPeaks MCP server (docs/REMOTE_DEPLOY.md).
+services:
+  - type: web
+    name: trainingpeaks-mcp
+    runtime: python
+    # free sleeps after 15 idle minutes; the first ChatGPT call after a sleep waits for a cold start.
+    plan: free
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: .venv/bin/tp-mcp serve-http
+    healthCheckPath: /healthz
+    envVars:
+      # Your TrainingPeaks Production_tpAuth cookie value. Render asks for it when the Blueprint is created.
+      - key: TP_AUTH_COOKIE
+        sync: false
+      # Password you type to approve a ChatGPT connection. Render generates it; read it in the Environment tab.
+      - key: MCP_OWNER_PASSWORD
+        generateValue: true
+      # Signs OAuth clients and tokens. Changing it disconnects ChatGPT until you reconnect.
+      - key: MCP_SIGNING_KEY
+        generateValue: true

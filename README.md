@@ -417,7 +417,9 @@ Claude cannot modify this via tool parameters. The only parameter is `browser` (
 
 ### No Network Exposure
 
-The MCP server uses **stdio transport only** - it communicates with Claude Desktop via stdin/stdout, not over the network. There is no HTTP server, no open ports, no remote access.
+`tp-mcp serve` uses **stdio transport only** - it communicates with Claude Desktop via stdin/stdout, not over the network. There is no HTTP server, no open ports, no remote access.
+
+The optional `tp-mcp serve-http` is a separate, read-only remote server (Streamable HTTP at `/mcp`, OAuth-protected) for ChatGPT, deployed on Render. It exposes 22 read-only tools and nothing that changes your data. See [docs/REMOTE_DEPLOY.md](docs/REMOTE_DEPLOY.md).
 
 ### Open Source
 
