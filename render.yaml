@@ -18,3 +18,4 @@ services:
       # Signs OAuth clients and tokens. Changing it disconnects ChatGPT until you reconnect.
       - key: MCP_SIGNING_KEY
         generateValue: true
+      # Optional: turn on non-destructive coaching writes for a capable MCP client. Default is read-only.\n      - key: TP_MCP_ENABLE_WRITES\n        value: "false"\n
