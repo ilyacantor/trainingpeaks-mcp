@@ -8,21 +8,24 @@ read-only.
 
 ## What the remote server exposes
 
-22 read-only tools. No tool that creates, changes or deletes anything is offered, and a call to any other tool
-name is refused.
+By default the remote endpoint exposes **29 read-only tools**. An optional
+`TP_MCP_ENABLE_WRITES=true` setting adds **17 specifically allowlisted
+coaching-write tools** (46 total) on a client or plan that supports them.
+Unlisted tools are refused at dispatch time, regardless of the client.
 
-| Area | Tools |
-|------|-------|
+| Area | Read-only tools |
+|------|-----------------|
 | Workouts | `tp_get_workouts`, `tp_get_workout`, `tp_get_strength_workouts`, `tp_get_strength_workout`, `tp_get_strength_summary` |
-| Workout analysis | `tp_analyze_workout`, `tp_get_workout_prs`, `tp_get_peaks` |
+| Workout analysis | `tp_analyze_workout`, `tp_get_workout_prs`, `tp_get_peaks`, `tp_validate_structure` |
 | Comments and notes | `tp_get_workout_comments`, `tp_get_workout_note`, `tp_list_notes`, `tp_get_note`, `tp_get_note_comments` |
-| Fitness history | `tp_get_fitness`, `tp_get_weekly_summary` |
-| Athlete settings | `tp_get_athlete_settings`, `tp_get_pool_length_settings` |
+| Fitness history | `tp_get_fitness`, `tp_get_weekly_summary`, `tp_get_atp` |
+| Athlete settings | `tp_get_athlete_settings`, `tp_get_pool_length_settings`, `tp_get_workout_types` |
 | Metrics | `tp_get_metrics`, `tp_get_nutrition` |
 | Events | `tp_get_events`, `tp_get_next_event`, `tp_get_focus_event` |
+| Libraries and exercises | `tp_get_libraries`, `tp_get_library_items`, `tp_get_library_item`, `tp_search_exercises` |
 
-Not exposed: every create/update/delete tool, `tp_refresh_auth` (browser cookie extraction), `tp_auth_status`,
-file download/upload, libraries, training plans, groups and equipment.
+Never exposed: deletion, upload, browser-cookie extraction, authentication refresh,
+FTP/zone updates, pairing/unpairing, cross-athlete mutation, bulk plan application.
 
 ## How access is protected
 
@@ -66,19 +69,22 @@ avoid that, change the instance type to a paid one under **Settings**.
 
 ## 3. Connect ChatGPT (browser)
 
-ChatGPT moves these menus from time to time; the labels below were current in October 2026. Custom MCP apps need
-**Developer mode**, which is available on some ChatGPT plans only, and a workspace admin can turn it off.
+Follow the current ChatGPT custom MCP plugin workflow (the older Developer Mode
+path has been superseded for eligible accounts):
 
-1. In ChatGPT, open **Settings** → **Apps** (in some versions **Apps & Connectors**) → **Advanced settings**, and
-   turn on **Developer mode**.
-2. Go back and choose **Create app**.
-3. Name: `TrainingPeaks`. MCP server URL: `https://<your-service>.onrender.com/mcp`. Authentication: **OAuth**.
-   Leave the client ID and secret empty; ChatGPT registers itself. Confirm the custom-app warning, then
-   **Create**.
-4. ChatGPT opens the "Connect ChatGPT to your TrainingPeaks" page from your server. Paste `MCP_OWNER_PASSWORD` and
-   click **Approve**. ChatGPT returns and lists the 22 tools.
-5. In a chat, select the TrainingPeaks app (or mention it by name) and ask, for example: "List my completed
-   workouts from the last 90 days."
+1. In ChatGPT web, open **Plugins** and choose **+ → Add custom MCP server**.
+2. Name it **TrainingPeaks**. Set the server URL to
+   `https://<your-service>.onrender.com/mcp`. Choose **OAuth** authentication,
+   with dynamic client registration (no preassigned client ID/secret).
+3. Acknowledge the custom-server risk warning, then choose **Create as a plugin**.
+4. During connection, your server asks for `MCP_OWNER_PASSWORD` from Render.
+   Enter it on your server's approval page, not in the chat.
+5. Install the new plugin and @mention **TrainingPeaks** to ask for workouts.
+
+**ChatGPT Pro limitation:** the published Help Center currently documents Pro
+custom MCP access as read/fetch only, while Business and Enterprise/Edu support
+full read/write MCP actions. The server supports an optional write mode, but
+enabling that does not override the client's plan restrictions.
 
 ## Upkeep
 
@@ -95,6 +101,7 @@ ChatGPT moves these menus from time to time; the labels below were current in Oc
 | `TP_AUTH_COOKIE` | yes | TrainingPeaks `Production_tpAuth` cookie value |
 | `MCP_OWNER_PASSWORD` | yes, 16+ characters | Approves a ChatGPT connection |
 | `MCP_SIGNING_KEY` | yes, 32+ characters | Signs OAuth clients and tokens |
+| `TP_MCP_ENABLE_WRITES` | no (default false) | Enable 17 non-delete coaching-write tools on supported clients |
 | `MCP_PUBLIC_URL` | no | Public base URL; Render's `RENDER_EXTERNAL_URL` is used when unset (set it for a custom domain) |
 | `PORT` | set by Render | Listen port |
 
