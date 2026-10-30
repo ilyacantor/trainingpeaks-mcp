@@ -39,7 +39,7 @@ from starlette.routing import Route
 from tp_mcp import __version__, apps
 from tp_mcp.auth import AuthStatus, validate_auth
 from tp_mcp.auth.storage import ENV_VAR_NAME
-from tp_mcp.remote_auth import READ_SCOPE, WRITE_SCOPE, OwnerOAuthProvider
+from tp_mcp.remote_auth import OwnerOAuthProvider, READ_SCOPE, WRITE_SCOPE
 from tp_mcp.server import TOOLS, _on_list_resources, _on_read_resource, call_tool
 
 logger = logging.getLogger("tp-mcp")
