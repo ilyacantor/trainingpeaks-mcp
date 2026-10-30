@@ -165,6 +165,17 @@ def cmd_serve() -> int:
     return run_server()
 
 
+def cmd_serve_http() -> int:
+    """Start the read-only remote MCP server (Streamable HTTP at /mcp, OAuth-protected).
+
+    Returns:
+        Exit code.
+    """
+    from tp_mcp.remote import run_remote_server
+
+    return run_remote_server()
+
+
 def cmd_config() -> int:
     """Output Claude Desktop config snippet.
 
@@ -211,6 +222,7 @@ def cmd_help() -> int:
     print("  auth-clear            Clear stored cookie")
     print("  config                Output Claude Desktop config snippet")
     print("  serve                 Start the MCP server")
+    print("  serve-http            Start the read-only remote server (HTTP + OAuth), see docs/REMOTE_DEPLOY.md")
     print("  help                  Show this help message")
     print()
     print("Examples:")
@@ -250,6 +262,7 @@ def main() -> int:
         "auth-clear": cmd_auth_clear,
         "config": cmd_config,
         "serve": cmd_serve,
+        "serve-http": cmd_serve_http,
         "help": cmd_help,
         "--help": cmd_help,
         "-h": cmd_help,

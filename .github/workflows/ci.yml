@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [main, v2.x]
+    branches: [main, v2.x, feat/remote-http-readonly]
   pull_request:
-    branches: [main, v2.x]
+    branches: [main, v2.x, feat/remote-http-readonly]
   schedule:
     # Weekly canary: catches fresh-install breakage from unpinned upstream
     # releases between pushes (mcp 2.0.0 broke installs with zero red CI).
