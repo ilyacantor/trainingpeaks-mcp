@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
@@ -10,6 +11,8 @@ from typing import Any
 import httpx
 
 from tp_mcp.auth import get_credential
+from tp_mcp.auth.password_login import TrainingPeaksLoginError, login_with_password
+from tp_mcp.auth.storage import ENV_VAR_NAME
 
 logger = logging.getLogger("tp-mcp")
 
@@ -18,6 +21,8 @@ DEFAULT_TIMEOUT = 30.0
 MIN_REQUEST_INTERVAL = 0.15  # 150ms between requests to avoid rate limiting
 TOKEN_ENDPOINT = "/users/v3/token"
 TOKEN_REFRESH_BUFFER = 60  # Refresh token 60s before expiry
+_PASSWORD_RELOGIN_COOLDOWN_SECONDS = 300
+_password_relogin_retry_after = 0.0
 
 
 class APIError(Exception):
@@ -241,11 +246,36 @@ class TPClient:
             )
 
             if response.status_code == 401:
-                return APIResponse(
-                    success=False,
-                    error_code=ErrorCode.AUTH_EXPIRED,
-                    message="Cookie expired. Use 'tp_refresh_auth' tool to re-authenticate.",
-                )
+                username = os.environ.get("TP_USERNAME", "")
+                password = os.environ.get("TP_PASSWORD", "")
+                global _password_relogin_retry_after
+                if username and password and time.monotonic() >= _password_relogin_retry_after:
+                    # Token refresh is serialized by _ensure_access_token's lock.
+                    # Avoid repeated failed login attempts from multiple tool calls.
+                    try:
+                        new_cookie = await login_with_password(username, password)
+                        os.environ[ENV_VAR_NAME] = new_cookie
+                        await self._throttle()
+                        response = await self._client.request(
+                            method="GET", url=url,
+                            headers=self._get_cookie_headers(new_cookie),
+                        )
+                        _password_relogin_retry_after = 0.0
+                    except TrainingPeaksLoginError:
+                        _password_relogin_retry_after = (
+                            time.monotonic() + _PASSWORD_RELOGIN_COOLDOWN_SECONDS
+                        )
+                        return APIResponse(
+                            success=False,
+                            error_code=ErrorCode.AUTH_EXPIRED,
+                            message="Automatic TrainingPeaks login failed. Check Render login secrets.",
+                        )
+                if response.status_code == 401:
+                    return APIResponse(
+                        success=False,
+                        error_code=ErrorCode.AUTH_EXPIRED,
+                        message="TrainingPeaks session expired or login rejected.",
+                    )
 
             if response.status_code != 200:
                 return APIResponse(
