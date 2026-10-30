@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 import pytest
 
-from tp_mcp.remote import REMOTE_TOOL_NAMES, RemoteConfig, RemoteConfigError, _remote_tools, build_app
+from tp_mcp.remote import REMOTE_TOOL_NAMES, REMOTE_READ_TOOL_NAMES, REMOTE_WRITE_TOOL_NAMES, RemoteConfig, RemoteConfigError, _remote_tools, build_app
 from tp_mcp.server import TOOLS
 
 BASE = "http://localhost"
@@ -153,12 +153,12 @@ async def _initialize(client: httpx.AsyncClient, token: str) -> httpx.Response:
 
 def test_allowlist_is_read_only_and_excludes_mutation_and_auth_tools():
     tools = _remote_tools()
-    assert {t.name for t in tools} == REMOTE_TOOL_NAMES
+    assert {t.name for t in tools} == REMOTE_READ_TOOL_NAMES
     assert all(t.annotations.read_only_hint and not t.annotations.destructive_hint for t in tools)
     for banned in ("tp_refresh_auth", "tp_auth_status", "tp_create_workout", "tp_update_workout", "tp_delete_workout"):
-        assert banned not in REMOTE_TOOL_NAMES
+        assert banned not in REMOTE_READ_TOOL_NAMES
     writes = {t.name for t in TOOLS if not t.annotations.read_only_hint}
-    assert writes and not (writes & REMOTE_TOOL_NAMES)
+    assert writes and not (writes & REMOTE_READ_TOOL_NAMES)
 
 
 def test_config_refuses_missing_or_weak_secrets(monkeypatch):
@@ -220,7 +220,7 @@ async def test_oauth_flow_then_initialize_list_and_refuse_writes():
         listed = await _rpc(client, access, "tools/list")
         assert listed.status_code == 200, listed.text
         names = {t["name"] for t in listed.json()["result"]["tools"]}
-        assert names == REMOTE_TOOL_NAMES
+        assert names == REMOTE_READ_TOOL_NAMES
 
         refused = await _rpc(
             client, access, "tools/call", {"name": "tp_delete_workout", "arguments": {"workout_id": "1"}}
@@ -286,3 +286,35 @@ async def test_login_locks_after_repeated_failures():
             assert (await client.post("/oauth/login", data={"req": req, "password": "nope"})).status_code == 401
         locked = await client.post("/oauth/login", data={"req": req, "password": PASSWORD})
         assert locked.status_code == 429 and "location" not in locked.headers
+
+
+def test_opt_in_coaching_writes_are_nondestructive_and_owner_only():
+    tools = _remote_tools(enable_writes=True)
+    names = {tool.name for tool in tools}
+    assert names == REMOTE_TOOL_NAMES
+    assert REMOTE_WRITE_TOOL_NAMES <= names
+    assert all(not tool.annotations.destructive_hint for tool in tools)
+    assert "tp_delete_workout" not in names
+    assert "tp_update_ftp" not in names
+    assert "tp_apply_training_plan" not in names
+    assert "tp_add_workout_comment" in names
+    assert "tp_create_workout" in names
+    assert all("athlete" not in tool.input_schema.get("properties", {}) for tool in tools)
+    scheduling = next(tool for tool in tools if tool.name == "tp_schedule_library_workout")
+    assert "athletes" not in scheduling.input_schema.get("properties", {})
+
+
+async def test_write_mode_advertises_nondestructive_tools_and_refuses_cross_athlete_calls():
+    cfg = RemoteConfig(public_url=BASE, owner_password=PASSWORD, signing_key=KEY, enable_writes=True)
+    async with _Running(cfg) as client:
+        creds, token = await _connect(client)
+        access = token["access_token"]
+        listed = await _rpc(client, access, "tools/list")
+        assert listed.status_code == 200
+        names = {t["name"] for t in listed.json()["result"]["tools"]}
+        assert names == REMOTE_TOOL_NAMES
+        no_delete = await _rpc(client, access, "tools/call", {"name": "tp_delete_workout", "arguments": {"workout_id": "1"}})
+        assert no_delete.json()["result"]["isError"] is True
+        blocked = await _rpc(client, access, "tools/call", {"name": "tp_add_workout_comment", "arguments": {"athlete": "other", "workout_id": "1", "comment": "hi"}})
+        assert blocked.json()["result"]["isError"] is True
+        assert "ATHLETE_TARGETING_NOT_ALLOWED" in blocked.json()["result"]["content"][0]["text"]
