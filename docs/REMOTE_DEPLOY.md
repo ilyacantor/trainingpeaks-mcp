@@ -97,3 +97,26 @@ ChatGPT moves these menus from time to time; the labels below were current in Oc
 | `MCP_SIGNING_KEY` | yes, 32+ characters | Signs OAuth clients and tokens |
 | `MCP_PUBLIC_URL` | no | Public base URL; Render's `RENDER_EXTERNAL_URL` is used when unset (set it for a custom domain) |
 | `PORT` | set by Render | Listen port |
+
+
+## Optional coaching write mode
+
+Keep the default TP_MCP_ENABLE_WRITES=false for ChatGPT Pro read/fetch use. If using
+a client or plan that supports write-enabled custom MCP, set the Render environment
+variable TP_MCP_ENABLE_WRITES=true and redeploy, then reconnect the app with
+the write authorization.
+
+The opt-in write set supports creating/editing/copying/reordering workouts,
+creating/updating strength sessions, adding workout and calendar-note comments,
+setting workout notes, creating/editing notes and race events, and creating/editing
+workout-library templates and scheduling library workouts for the owner.
+
+The server still blocks all deletes, file uploads, pairing/unpairing,
+threshold/zone updates, bulk training-plan applications, and cross-athlete writes.
+It removes the athlete-targeting argument from advertised tools and refuses
+explicit athlete-targeting arguments at dispatch time.
+
+Because create/comment/copy actions are non-idempotent, avoid retries after
+ambiguous network failures without first fetching the target date or comments.
+The client should request user confirmation before sending any coaching write.
+The server does not independently implement a per-write approval dialog.
