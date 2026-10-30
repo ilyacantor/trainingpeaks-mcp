@@ -50,7 +50,9 @@ from starlette.routing import Route
 
 logger = logging.getLogger("tp-mcp")
 
-SCOPE = "trainingpeaks.read"
+READ_SCOPE = "trainingpeaks.read"
+WRITE_SCOPE = "trainingpeaks.write"
+SCOPE = READ_SCOPE
 LOGIN_PATH = "/oauth/login"
 
 ACCESS_TOKEN_TTL = 3600
@@ -141,11 +143,13 @@ class _UsedSet:
 class OwnerOAuthProvider:
     """OAuthAuthorizationServerProvider for a single owner, stateless across restarts."""
 
-    def __init__(self, *, signing_key: str, owner_password: str, issuer_url: str, resource_url: str):
+    def __init__(self, *, signing_key: str, owner_password: str, issuer_url: str, resource_url: str, scope: str = READ_SCOPE, enable_writes: bool = False):
         self._sealer = Sealer(signing_key)
         self._password_digest = hashlib.sha256(owner_password.encode()).digest()
         self.issuer_url = issuer_url.rstrip("/")
         self.resource_url = resource_url.rstrip("/")
+        self.scope = scope
+        self.enable_writes = enable_writes
         self._used_codes = _UsedSet()
         self._used_refresh = _UsedSet()
         self._login_failures: deque[float] = deque()
@@ -206,9 +210,9 @@ class OwnerOAuthProvider:
 
     async def authorize(self, client: OAuthClientInformationFull, params: AuthorizationParams) -> str:
         self._check_resource(params.resource)
-        scopes = params.scopes or [SCOPE]
-        if set(scopes) - {SCOPE}:
-            raise AuthorizeError(error="invalid_scope", error_description=f"Only '{SCOPE}' is available")
+        scopes = params.scopes or [self.scope]
+        if set(scopes) - {self.scope}:
+            raise AuthorizeError(error="invalid_scope", error_description=f"Only '{self.scope}' is available")
         pending = self._sealer.seal(
             "login",
             {
