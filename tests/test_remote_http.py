@@ -170,7 +170,7 @@ def test_allowlist_is_read_only_and_excludes_mutation_and_auth_tools():
 
 
 def test_config_refuses_missing_or_weak_secrets(monkeypatch):
-    for var in ("TP_AUTH_COOKIE", "MCP_OWNER_PASSWORD", "MCP_SIGNING_KEY", "MCP_PUBLIC_URL", "RENDER_EXTERNAL_URL"):
+    for var in ("TP_AUTH_COOKIE", "TP_USERNAME", "TP_PASSWORD", "MCP_OWNER_PASSWORD", "MCP_SIGNING_KEY", "MCP_PUBLIC_URL", "RENDER_EXTERNAL_URL"):
         monkeypatch.delenv(var, raising=False)
     with pytest.raises(RemoteConfigError) as e:
         RemoteConfig.from_env()
