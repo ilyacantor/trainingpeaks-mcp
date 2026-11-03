@@ -42,6 +42,7 @@ from tp_mcp import __version__, apps
 from tp_mcp.auth import AuthStatus, validate_auth
 from tp_mcp.auth.password_login import TrainingPeaksLoginError, login_with_password
 from tp_mcp.auth.storage import ENV_VAR_NAME
+from tp_mcp.plan_publisher import PlannerPortal
 from tp_mcp.remote_auth import READ_SCOPE, WRITE_SCOPE, OwnerOAuthProvider
 from tp_mcp.server import TOOLS, _on_list_resources, _on_read_resource, call_tool
 
@@ -259,6 +260,11 @@ def build_app(config: RemoteConfig) -> Starlette:
         revocation_options=RevocationOptions(enabled=False),
         required_scopes=[scope],
     )
+    planner = PlannerPortal(
+        owner_password=config.owner_password,
+        signing_key=config.signing_key,
+        public_url=config.public_url,
+    )
     return build_server(config.enable_writes).streamable_http_app(
         streamable_http_path=MCP_PATH,
         stateless_http=True,
@@ -267,7 +273,7 @@ def build_app(config: RemoteConfig) -> Starlette:
         auth=auth,
         token_verifier=ProviderTokenVerifier(provider),
         auth_server_provider=provider,
-        custom_starlette_routes=[*provider.routes(), Route("/healthz", _healthz, methods=["GET"])],
+        custom_starlette_routes=[*provider.routes(), Route("/healthz", _healthz, methods=["GET"]), *planner.routes()],
     )
 
 

@@ -136,3 +136,38 @@ Because create/comment/copy actions are non-idempotent, avoid retries after
 ambiguous network failures without first fetching the target date or comments.
 The client should request user confirmation before sending any coaching write.
 The server does not independently implement a per-write approval dialog.
+
+
+## Publish a 12-week Low Gap plan (without ChatGPT MCP write permissions)
+
+The authenticated owner can open **https://trainingpeaks-mcp-5giu.onrender.com/planner**
+directly in a browser. This web route is separate from the read-only `/mcp`
+endpoint, and therefore does **not** require ChatGPT write-capable MCP tools.
+
+1. Open `/planner`, and sign in with your existing `MCP_OWNER_PASSWORD`
+   from Render's private Environment settings (not your TrainingPeaks password).
+2. Review the 12-week cycling plan: Nov 9, 2026 to Jan 31, 2027, with Mondays
+   off, a Low Gap 59-mile long-course race on January 31, and the athlete's
+   FTP assumed to be 280 W.
+3. Publishing is opt-in **one week at a time**. Review that week's six
+   prescribed cycling workouts, acknowledge the medical safety notice, then
+   click **Publish week**. Nothing is changed on GET, login or preview.
+4. Publication checks current TrainingPeaks FTP and existing calendar entries,
+   skips previously published workouts, and refuses to overwrite other bike
+   sessions. It calls the same tested TrainingPeaks structured-workout creation
+   function used by the local MCP server.
+5. Return to TrainingPeaks and inspect the created structured power sessions.
+   Individual training sessions remain adjustable in TrainingPeaks.
+
+**Security:** This page uses an owner-password login, a 30-minute signed,
+HTTP-only/Secure/SameSite session cookie, origin and CSRF checks, and an explicit
+per-week approval. The page does not enable generic write tools on the MCP
+endpoint, and its password is never logged, shown to ChatGPT or committed.
+It never deletes workouts or changes the user's FTP. Credentials remain server-side.
+
+**Limitations:** Only cycling sessions are published. Swimming therapy and
+strength work are not yet scheduled. The program is a provisional training plan
+that requires medical clearance before its hard sessions because of the
+athlete's recurrent severe swimming-associated breathing difficulty. Planned
+TSS is an estimate based on the specified %FTP blocks; actual TSS varies.
+The race itself is a non-ERG calendar workout without a fabricated TSS.
