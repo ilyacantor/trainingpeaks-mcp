@@ -277,9 +277,17 @@ button:disabled{{background:#aaa}} input[type=password]{{padding:10px;border:1px
 .status{{color:#245b31}}.muted{{color:#647384}}.error{{color:#a12828}}.form-row{{margin:10px 0}}
 small{{font-size:12px}}
 </style></head><body>{body}</body></html>"""
-    return HTMLResponse(document, headers={"Cache-Control": "no-store",
-                                           "X-Content-Type-Options": "nosniff",
-                                           "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"})
+    return HTMLResponse(
+        document,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": (
+                "default-src 'none'; style-src 'unsafe-inline'; "
+                "form-action 'self'; base-uri 'none'; frame-ancestors 'none'"
+            ),
+        },
+    )
 
 
 class PlannerPortal:
@@ -322,7 +330,8 @@ class PlannerPortal:
                 '<p>This private page uses the <b>MCP_OWNER_PASSWORD</b> from your Render Environment.'
                 ' It does not require a TrainingPeaks cookie or a new ChatGPT connection.</p>'
                 '<form method="post" action="/planner/login" class="card">'
-                '<label>Owner password <input type="password" name="password" autocomplete="current-password" required></label> '
+                '<label>Owner password <input type="password" name="password" '
+                'autocomplete="current-password" required></label> '
                 '<button type="submit">Open plan preview</button></form>'
                 '<p class="muted">Nothing will be published until you approve an individual week.</p>'
             )
@@ -333,7 +342,10 @@ class PlannerPortal:
             power_zones = (settings.get("settings") or {}).get("powerZones") or []
             ftp = next((z.get("threshold") for z in power_zones if z.get("workoutTypeId") == 0), None)
             if ftp != EXPECTED_FTP:
-                ftp_warning = f'<p class="error">Live TrainingPeaks FTP is {_esc(ftp)}, not 280 W. Publishing is disabled until the plan is reviewed.</p>'
+                ftp_warning = (
+                    f'<p class="error">Live TrainingPeaks FTP is {_esc(ftp)}, not 280 W. '
+                    'Publishing is disabled until the plan is reviewed.</p>'
+                )
         except Exception:
             ftp = None
             ftp_warning = '<p class="error">Could not verify current FTP. Publishing is disabled.</p>'
