@@ -123,13 +123,15 @@ async def test_login_preview_csrf_and_weekly_idempotent_publishing(mocked_traini
         assert "not medical clearance" in preview.text
         assert "280 W" in preview.text
 
-        # Never publish without valid owner session, origin, CSRF and approval.
+        # Never publish without valid owner session, CSRF and approval.
         rejected = await client.post("/planner/publish",
                                      data={"csrf": "bad", "week": "1", "acknowledged": "yes"},
                                      headers=ORIGIN)
         assert rejected.status_code == 403
+        # Browser-supplied Origin is no longer an authorization mechanism.
+        # A forged cross-origin form still cannot know the private CSRF token.
         rejected = await client.post("/planner/publish",
-                                     data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+                                     data={"csrf": "forged", "week": "1", "acknowledged": "yes"},
                                      headers={"Origin": "https://attacker.invalid"})
         assert rejected.status_code == 403
         rejected = await client.post("/planner/publish",
@@ -221,13 +223,13 @@ async def test_browser_post_without_origin_can_login_and_publish(mocked_training
         assert bad_csrf.status_code == 403
         foreign_origin = await client.post(
             "/planner/publish",
-            data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+            data={"csrf": "fake-csrf", "week": "1", "acknowledged": "yes"},
             headers={"Origin": "https://attacker.invalid"},
         )
         assert foreign_origin.status_code == 403
         foreign_referer = await client.post(
             "/planner/publish",
-            data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+            data={"csrf": "fake-csrf", "week": "1", "acknowledged": "yes"},
             headers={"Referer": "https://attacker.invalid/publish"},
         )
         assert foreign_referer.status_code == 403
@@ -249,13 +251,41 @@ async def test_browser_post_without_origin_can_login_and_publish(mocked_training
         assert len(records) == 6
 
 
-async def test_login_rejects_explicit_foreign_origin(mocked_trainingpeaks):
+async def test_login_and_publish_with_opaque_or_embedded_browser_origin(mocked_trainingpeaks):
+    """The browser may send an opaque or chatgpt.com Origin on a same-tab form."""
+    records, _ = mocked_trainingpeaks
     async with RunningApp() as client:
+        wrong = await client.post(
+            "/planner/login",
+            data={"password": "incorrect"},
+            headers={"Origin": "null"},
+        )
+        assert wrong.status_code == 401
+        assert COOKIE_NAME not in client.cookies
+
         response = await client.post(
             "/planner/login",
             data={"password": PASSWORD},
-            headers={"Origin": "https://attacker.invalid"},
+            headers={"Origin": "null"},
         )
-        assert response.status_code == 200
-        assert "Invalid request origin" in response.text
-        assert COOKIE_NAME not in client.cookies
+        assert response.status_code == 303
+        csrf = Sealer(KEY).open("planner-session", client.cookies[COOKIE_NAME])["csrf"]
+        assert (await client.get("/planner")).status_code == 200
+
+        # Even with a correct owner login and an opaque Origin, only an
+        # explicitly approved post carrying the session's CSRF can publish.
+        rejected = await client.post(
+            "/planner/publish",
+            data={"csrf": "fake", "week": "1", "acknowledged": "yes"},
+            headers={"Origin": "https://chatgpt.com"},
+        )
+        assert rejected.status_code == 403
+        assert not records
+
+        allowed = await client.post(
+            "/planner/publish",
+            data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+            headers={"Origin": "https://chatgpt.com"},
+        )
+        assert allowed.status_code == 303
+        assert len(records) == 6
