@@ -313,7 +313,29 @@ class PlannerPortal:
         return None
 
     def _origin_ok(self, request: Request) -> bool:
-        return request.headers.get("origin", "") == self.public_url
+        """Check supplied request origin, allowing legitimate browsers that omit it.
+
+        Some browser privacy settings omit Origin on ordinary same-site HTML
+        form POSTs. A missing Origin is not proof of a cross-site request:
+        publishing still requires our signed owner-session cookie, SameSite
+        protection, and an unguessable form CSRF token. An explicitly foreign
+        or opaque Origin is always rejected.
+        """
+        origin = request.headers.get("origin")
+        if origin is not None:
+            return hmac.compare_digest(origin.rstrip("/"), self.public_url)
+
+        referer = request.headers.get("referer")
+        if referer:
+            from urllib.parse import urlsplit
+
+            parts = urlsplit(referer)
+            return f"{parts.scheme}://{parts.netloc}" == self.public_url
+
+        # Referrer-Policy: no-referrer in our own HTML suppresses Referer.
+        # A missing Origin and Referer is expected for some browser POSTs.
+        # Publishing remains CSRF-authenticated independently of this check.
+        return True
 
     def _authorized_post(self, request: Request, csrf: Any) -> bool:
         claims = self._session(request)

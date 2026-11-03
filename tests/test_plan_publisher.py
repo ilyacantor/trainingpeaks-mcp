@@ -195,3 +195,67 @@ async def test_server_only_publishes_after_explicit_owner_action(mocked_training
         await do_login(client)
         await client.get("/planner")
         assert records == [], "preview, GET, and login must never publish"
+
+
+async def test_browser_post_without_origin_can_login_and_publish(mocked_trainingpeaks):
+    """Some browsers omit Origin and Referer. A real login should still work.
+
+    Signed owner session, SameSite cookie, and independent CSRF authorization
+    are still enforced before creating any TrainingPeaks workout.
+    """
+    records, _ = mocked_trainingpeaks
+    async with RunningApp() as client:
+        landing = await client.get("/planner")
+        assert landing.status_code == 200
+        # Exercise the exact browser behavior that previously got
+        # "Invalid request origin" (POST has neither Origin nor Referer).
+        login = await client.post("/planner/login", data={"password": PASSWORD})
+        assert login.status_code == 303
+        claims = Sealer(KEY).open("planner-session", client.cookies[COOKIE_NAME])
+        assert claims and claims["csrf"]
+        csrf = claims["csrf"]
+
+        bad_csrf = await client.post(
+            "/planner/publish", data={"week": "1", "acknowledged": "yes"}
+        )
+        assert bad_csrf.status_code == 403
+        foreign_origin = await client.post(
+            "/planner/publish",
+            data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+            headers={"Origin": "https://attacker.invalid"},
+        )
+        assert foreign_origin.status_code == 403
+        foreign_referer = await client.post(
+            "/planner/publish",
+            data={"csrf": csrf, "week": "1", "acknowledged": "yes"},
+            headers={"Referer": "https://attacker.invalid/publish"},
+        )
+        assert foreign_referer.status_code == 403
+        assert not records
+
+        published = await client.post(
+            "/planner/publish", data={"csrf": csrf, "week": "1", "acknowledged": "yes"}
+        )
+        assert published.status_code == 303
+        assert len(records) == 6
+
+        # Missing both headers is not a bypass: a cross-site attacker has
+        # neither the owner session nor its unguessable CSRF value.
+        client.cookies.clear()
+        unsigned = await client.post(
+            "/planner/publish", data={"csrf": csrf, "week": "2", "acknowledged": "yes"}
+        )
+        assert unsigned.status_code == 403
+        assert len(records) == 6
+
+
+async def test_login_rejects_explicit_foreign_origin(mocked_trainingpeaks):
+    async with RunningApp() as client:
+        response = await client.post(
+            "/planner/login",
+            data={"password": PASSWORD},
+            headers={"Origin": "https://attacker.invalid"},
+        )
+        assert response.status_code == 200
+        assert "Invalid request origin" in response.text
+        assert COOKIE_NAME not in client.cookies
