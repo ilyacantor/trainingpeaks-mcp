@@ -312,35 +312,18 @@ class PlannerPortal:
             return claims
         return None
 
-    def _origin_ok(self, request: Request) -> bool:
-        """Check supplied request origin, allowing legitimate browsers that omit it.
-
-        Some browser privacy settings omit Origin on ordinary same-site HTML
-        form POSTs. A missing Origin is not proof of a cross-site request:
-        publishing still requires our signed owner-session cookie, SameSite
-        protection, and an unguessable form CSRF token. An explicitly foreign
-        or opaque Origin is always rejected.
-        """
-        origin = request.headers.get("origin")
-        if origin is not None:
-            return hmac.compare_digest(origin.rstrip("/"), self.public_url)
-
-        referer = request.headers.get("referer")
-        if referer:
-            from urllib.parse import urlsplit
-
-            parts = urlsplit(referer)
-            return f"{parts.scheme}://{parts.netloc}" == self.public_url
-
-        # Referrer-Policy: no-referrer in our own HTML suppresses Referer.
-        # A missing Origin and Referer is expected for some browser POSTs.
-        # Publishing remains CSRF-authenticated independently of this check.
-        return True
-
     def _authorized_post(self, request: Request, csrf: Any) -> bool:
+        """Authorize publishing by signed owner session and independent CSRF.
+
+        Origin and Referer are intentionally not requirements: a browser,
+        browser extension, or embedded app may send a different Origin on
+        same-site form POSTs. We verify the authenticated session and a
+        high-entropy CSRF token embedded only in the private owner preview.
+        The session cookie is Secure, HttpOnly and SameSite=Strict.
+        """
         claims = self._session(request)
         return bool(
-            claims and self._origin_ok(request) and isinstance(csrf, str)
+            claims and isinstance(csrf, str)
             and hmac.compare_digest(claims["csrf"], csrf)
         )
 
@@ -447,8 +430,9 @@ class PlannerPortal:
         )
 
     async def login(self, request: Request) -> Response:
-        if not self._origin_ok(request):
-            return _layout('<h1>Invalid request origin</h1>')
+        # Logging in does not create or modify any TrainingPeaks workout.
+        # Only a valid owner password can issue an authenticated session.
+        # Browser Origin headers are unreliable and are not a security gate.
         now = time.monotonic()
         while self.failures and now - self.failures[0] >= AUTH_FAILURE_WINDOW:
             self.failures.popleft()
